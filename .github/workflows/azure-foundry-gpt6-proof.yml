@@ -1,0 +1,84 @@
+name: Azure Foundry GPT-6 regression proof
+
+on:
+  push:
+    branches: [ci/azure-foundry-gpt6-proof]
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HERMES_HOME: ${{ runner.temp }}/hermes-upstream-home
+      HERMES_RUNTIME_DIR: ${{ runner.temp }}/hermes-upstream-tools
+      HERMES_TEST_FILE_RETRIES: "0"
+      HERMES_TEST_WORKERS: "2"
+      BASE_COMMIT: 9976f4857b72439d79016354d7b6e1a3ee952e2f
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 3
+          persist-credentials: false
+
+      - name: Prepare the locked test environment
+        uses: ./.github/actions/setup-pm
+        with:
+          extras: '["anthropic", "azure-identity"]'
+          test-environment: "true"
+          cache: "false"
+          cache-python: "false"
+          cache-node: "false"
+
+      - name: Prove the regression on the unchanged upstream source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_COMMIT" --depth=1
+          git restore --source="$BASE_COMMIT" -- \
+            agent/chat_completion_helpers.py \
+            hermes_cli/models.py \
+            hermes_cli/models_catalog_static.py \
+            hermes_cli/runtime_provider.py \
+            hermes_cli/runtime_provider_backends.py
+          set +e
+          scripts/run_tests.sh \
+            tests/hermes_cli/test_model_validation.py \
+            tests/hermes_cli/test_azure_foundry_entra.py \
+            tests/agent/test_fallback_api_mode_preservation.py \
+            -k 'AzureFoundry or persisted_config_routes_each_model_without_losing_entra' \
+            -q > "$RUNNER_TEMP/red.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/red.log"
+          if [ "$status" -eq 0 ]; then
+            echo "Expected GPT-6 routing regressions on the upstream base." >&2
+            exit 1
+          fi
+          if grep -Eq 'ImportError|ModuleNotFoundError|ERROR collecting' "$RUNNER_TEMP/red.log"; then
+            echo "Dependency/import failures are not a valid regression proof." >&2
+            exit 1
+          fi
+          grep -Eq 'None.*codex_responses|chat_completions.*codex_responses' "$RUNNER_TEMP/red.log"
+          git restore --source=HEAD -- \
+            agent/chat_completion_helpers.py \
+            hermes_cli/models.py \
+            hermes_cli/models_catalog_static.py \
+            hermes_cli/runtime_provider.py \
+            hermes_cli/runtime_provider_backends.py
+
+      - name: Run fixed routing and neighboring regression suites
+        run: |
+          scripts/run_tests.sh \
+            tests/hermes_cli/test_model_validation.py \
+            tests/hermes_cli/test_azure_foundry_entra.py \
+            tests/hermes_cli/test_runtime_provider_resolution.py \
+            tests/agent/test_fallback_api_mode_preservation.py \
+            tests/agent/test_auxiliary_client_azure_foundry.py \
+            tests/agent/test_fallback_credential_isolation.py \
+            -q
+
+      - name: Run repository blocking checks
+        run: '"$HERMES_PYTHON" scripts/check'
