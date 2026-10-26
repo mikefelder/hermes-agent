@@ -12,8 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      HERMES_HOME: ${{ runner.temp }}/hermes-upstream-home
-      HERMES_RUNTIME_DIR: ${{ runner.temp }}/hermes-upstream-tools
       HERMES_TEST_FILE_RETRIES: "0"
       HERMES_TEST_WORKERS: "2"
       BASE_COMMIT: 9976f4857b72439d79016354d7b6e1a3ee952e2f
@@ -22,6 +20,11 @@ jobs:
         with:
           fetch-depth: 3
           persist-credentials: false
+
+      - name: Isolate test state
+        run: |
+          echo "HERMES_HOME=$RUNNER_TEMP/hermes-upstream-home" >> "$GITHUB_ENV"
+          echo "HERMES_RUNTIME_DIR=$RUNNER_TEMP/hermes-upstream-tools" >> "$GITHUB_ENV"
 
       - name: Prepare the locked test environment
         uses: ./.github/actions/setup-pm
