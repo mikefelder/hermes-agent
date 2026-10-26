@@ -42,6 +42,8 @@ jobs:
           git fetch origin "$BASE_COMMIT" --depth=1
           git restore --source="$BASE_COMMIT" -- \
             agent/chat_completion_helpers.py \
+            agent/route_binding.py \
+            agent/agent_init_fallback.py \
             hermes_cli/models.py \
             hermes_cli/models_catalog_static.py \
             hermes_cli/runtime_provider.py \
@@ -67,6 +69,8 @@ jobs:
           grep -Eq 'None.*codex_responses|chat_completions.*codex_responses' "$RUNNER_TEMP/red.log"
           git restore --source=HEAD -- \
             agent/chat_completion_helpers.py \
+            agent/route_binding.py \
+            agent/agent_init_fallback.py \
             hermes_cli/models.py \
             hermes_cli/models_catalog_static.py \
             hermes_cli/runtime_provider.py \
@@ -81,7 +85,8 @@ jobs:
             tests/agent/test_fallback_api_mode_preservation.py \
             tests/agent/test_auxiliary_client_azure_foundry.py \
             tests/agent/test_fallback_credential_isolation.py \
+            tests/agent/test_external_process_provider_init.py \
             -q
 
       - name: Run repository blocking checks
-        run: '"$HERMES_PYTHON" scripts/check'
+        run: '"$HERMES_PYTHON" scripts/check --base "$BASE_COMMIT"'
